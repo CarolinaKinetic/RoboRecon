@@ -593,14 +593,44 @@ function ($scope, $stateParams, $firebaseArray, $firebaseObject, $cordovaFile) {
   
 }])
 
-.controller('burgerMinderCtrl', ['$scope', '$stateParams', '$firebaseArray', '$cordovaFile', '$cordovaToast', '$interval',
-  function ($scope, $stateParams, $firebaseArray, $cordovaFile, $cordovaToast, $interval) {
+.controller('scoutMinderCtrl', ['$scope', '$stateParams', '$firebaseArray', '$cordovaFile', '$cordovaToast', '$interval', '$http',
+  function ($scope, $stateParams, $firebaseArray, $cordovaFile, $cordovaToast, $interval, $http) {
     
-  /* This method will pull together an overview for each match, including the
+  /* This method pulls together an overview for each match, including the
    * match number, team number, scout name, and the % of the following questions
    * that have been answered: AQ1, AQ2, AQ3, EQ1, EQ2, and EQ3
    */
    
+  $scope.getTBAData = function() {
+    //retrieve from the TBA API a list of teams that were slated to compete in this match
+    $http({method:'GET', url:'https://www.thebluealliance.com/api/v3/event/2018scmb/matches', headers: {'X-TBA-Auth-Key':'oiAG70Gqv6rVg75zfd4wlXFzMyM4vfAAzzJytIy20VlLM7WygO6dkUSCxs7qLLTo'}})
+      .success(function(data, status) {
+        $scope.TBAData = data;
+        console.log("TBA Data contains " + $scope.TBAData.length + " matches");
+      })
+      .error(function(data, status) {
+        console.log("TBA Data error: " + status);
+      });
+  }
+  $scope.TBAData = $scope.getTBAData();
+
+
+
+  $scope.getAssignedTeamsForMatch = function(matchNumber) {
+    var assignedTeamsForMatch = [];
+    for (var i=0; i<$scope.TBAData.length; i++) {
+      if ($scope.TBAData[i].key == "2018scmb_qm" + matchNumber) {
+        assignedTeamsForMatch.push($scope.TBAData[i].alliances.blue.team_keys[0].substring(3));
+        assignedTeamsForMatch.push($scope.TBAData[i].alliances.blue.team_keys[1].substring(3));
+        assignedTeamsForMatch.push($scope.TBAData[i].alliances.blue.team_keys[2].substring(3));
+        assignedTeamsForMatch.push($scope.TBAData[i].alliances.red.team_keys[0].substring(3));
+        assignedTeamsForMatch.push($scope.TBAData[i].alliances.red.team_keys[1].substring(3));
+        assignedTeamsForMatch.push($scope.TBAData[i].alliances.red.team_keys[2].substring(3));
+      }
+    }
+    return assignedTeamsForMatch;
+  }
+
 
 
   $scope.refresh = function() {
@@ -611,75 +641,32 @@ function ($scope, $stateParams, $firebaseArray, $firebaseObject, $cordovaFile) {
     
     matches.$loaded().then(function(matches) { 
       angular.forEach(matches, function(match) { 
+        
+              //retrieve team information for selected match from TBAData
+              var scheduledTeams = $scope.getAssignedTeamsForMatch(match.$id);
+
+        
         var robotMatches = match["Teams"];
         angular.forEach(robotMatches, function(robotMatchWrapper) { 
           angular.forEach(robotMatchWrapper, function(robotMatch) { 
             if (robotMatch["Match Number"]) {
               thisMatchOverview = {};
               if (!$scope.matchOverviews[robotMatch["Match Number"]]) {
-                $scope.matchOverviews[robotMatch["Match Number"]] = {'scouts': []};
+                $scope.matchOverviews[robotMatch["Match Number"]] = {'scouts': [], 'scheduledTeams': []};
               }
               thisMatchOverview = $scope.matchOverviews[robotMatch["Match Number"]];
               thisMatchOverview.matchNum = robotMatch["Match Number"];
+              
+              //retrieve team information for selected match from TBAData
+              //var scheduledTeams = $scope.getAssignedTeamsForMatch(robotMatch["Match Number"]);
+              
+              //load information about the scout data collected for the match
               var scoutRecord = {};
               scoutRecord.name = robotMatch['Student'];
               scoutRecord.teamNum = robotMatch['Team Number'];
-              
-              //determine the % of critical questions answered
-              var unanswered = ["AQ1", "AQ2", "AQ3", "EQ1", "EQ2"];
-              if (robotMatch.AQ1 != null) {
-                var index = unanswered.indexOf("AQ1");
-                if (index > -1) {
-                  unanswered.splice(index, 1);
-                }
-              }
-              if (robotMatch.AQ2 != null) {
-                var index = unanswered.indexOf("AQ2");
-                if (index > -1) {
-                  unanswered.splice(index, 1);
-                }
-              }
-              if (robotMatch.AQ3 != null) {
-                var index = unanswered.indexOf("AQ3");
-                if (index > -1) {
-                  unanswered.splice(index, 1);
-                }
-              }
-              if (robotMatch.TQ1 != null) {
-                var index = unanswered.indexOf("TQ1");
-                if (index > -1) {
-                  unanswered.splice(index, 1);
-                }
-              }
-              if (robotMatch.TQ2 != null) {
-                var index = unanswered.indexOf("TQ2");
-                if (index > -1) {
-                  unanswered.splice(index, 1);
-                }
-              }
-              if (robotMatch.TQ3 != null) {
-                var index = unanswered.indexOf("TQ3");
-                if (index > -1) {
-                  unanswered.splice(index, 1);
-                }
-              }
-              if (robotMatch.EQ1 != null) {
-                var index = unanswered.indexOf("EQ1");
-                if (index > -1) {
-                  unanswered.splice(index, 1);
-                }
-              }
-              if (robotMatch.EQ2 != null) {
-                var index = unanswered.indexOf("EQ2");
-                if (index > -1) {
-                  unanswered.splice(index, 1);
-                }
-              }
-              if (unanswered.length == 0) {
-                unanswered.push("None");
-              }
-              scoutRecord.unanswered = unanswered;
+             
               thisMatchOverview['scouts'].push(scoutRecord);
+              thisMatchOverview['scheduledTeams'].push(scheduledTeams);
             }
           })
         })
@@ -692,7 +679,7 @@ function ($scope, $stateParams, $firebaseArray, $firebaseObject, $cordovaFile) {
   }
   
   $scope.refresh();
-  $interval($scope.refresh, 5000);
+  //$interval($scope.refresh, 5000);
   
 }])
    
